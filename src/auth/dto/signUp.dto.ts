@@ -16,7 +16,7 @@ export class SignUpDto {
     password: string;
 
     @IsString()
-    name: string;
+    fullName: string;
     
     @IsString()
     @MaxLength(20)

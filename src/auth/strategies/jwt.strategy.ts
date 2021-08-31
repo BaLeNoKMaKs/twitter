@@ -2,10 +2,9 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { JwtPayload } from '../interfaces/jwt.payload.interface';
-import { User } from 'src/users/entities/users.entity';
 import { UserRepository } from 'src/users/users.repository';
 import { InjectRepository } from '@nestjs/typeorm';
-import { UsingJoinColumnOnlyOnOneSideAllowedError } from 'typeorm';
+import { User } from 'src/entities/user.entity';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -19,8 +18,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
  async validate(payload: JwtPayload): Promise<User> {
    const { email } = payload;
-  console.log(payload, "email")
-    const user = await this.userRepository.findOne({ email });
+ 
+   const user = await this.userRepository.findOne({ email });
+   
     if (!user) {
         throw new UnauthorizedException('User is invalid');
     }
