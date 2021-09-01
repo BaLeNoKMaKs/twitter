@@ -8,6 +8,10 @@ import { UserRepository } from '../users/users.repository';
 import { FileService } from '../file/file.service';
 
 import * as multer from 'multer';
+import { User } from 'src/entities/user.entity';
+import { UpdateTweetDto } from './dto/updateTweet.dto';
+import { Mention } from './../entities/mention.entity';
+
 
 @Injectable()
 export class TweetsService {
@@ -15,7 +19,8 @@ export class TweetsService {
    constructor(
       @InjectRepository(Tag) private readonly TagRepository: Repository<Tag>,
       @InjectRepository(UserRepository) private readonly UserRepository: UserRepository,
-      @InjectRepository(Tweet) private readonly TweetRepository: Repository<Tweet>,
+       @InjectRepository(Tweet) private readonly TweetRepository: Repository<Tweet>,
+      @InjectRepository(Mention) private readonly MentionRepository: Repository<Mention>,
       private readonly FileService: FileService
    ) { }
    
@@ -28,30 +33,34 @@ export class TweetsService {
    }
    
    async createTweet(
-      id: number,
+      userId: number,
       createTweetDto: CreateTweetDto,
       files?: multer.File[]  
    ) {
-      const user = await this.UserRepository.findOne({ where: { id } });
+      const user = await this.UserRepository.findOne({ where: { id: userId } });
 
       if (!user) {
             throw new BadRequestException({ message: 'Cannot identify user' });
       }
         const newTweet = this.TweetRepository.create({
-            gif: createTweetDto.gif,
             text: createTweetDto.text,
             user,
             tags: [],
             comments: [],
             images: [],
+            mentions: []
         });
 
         if (files) {
             newTweet.images = await this.FileService.addImagesToTweet(files);
         }
 
-        if (createTweetDto.tags.length !== 0 && createTweetDto.tags[0] !== '') {
+        if (createTweetDto.tags && createTweetDto.tags.length !== 0 && createTweetDto.tags[0] !== '') {
             await this.createTags(newTweet, createTweetDto.tags);
+        }
+       
+        if (createTweetDto.mentions && createTweetDto.mentions.length !== 0 && createTweetDto.mentions[0] !== '') {
+            await this.createMentions(newTweet, createTweetDto.mentions, userId);
         }
 
         await this.TweetRepository.save(newTweet);
@@ -59,7 +68,7 @@ export class TweetsService {
         return { user: rest, tweet: newTweet };
    }
 
-   async deleteTweet(id: number) {
+    async deleteTweet(id: number) {
         const tweetToDelete = await this.TweetRepository.findOne({
             where: { id },
         });
@@ -71,7 +80,75 @@ export class TweetsService {
         await this.TweetRepository.remove(tweetToDelete);
 
         return { message: 'Tweet deleted successfully' };
-   }
+    }
+    
+    async updateTweet(userId: number, tweetId: number, updateTweetDto: UpdateTweetDto, files?: multer.File[]) {
+        
+        const user = await this.UserRepository.findOne({ where: { id: userId } });
+
+        if (!user) {
+            throw new BadRequestException({ message: 'Cannot identify user' });
+        }
+        
+        const tweet = await this.TweetRepository.findOne({
+           where: { id: tweetId },
+        });
+        
+        if (!tweet && tweet.user.id !== user.id) {
+            throw new BadRequestException({ message: 'Cannot find the tweet or u have not rightn to change it' });
+        }
+         
+        const newTweet = this.TweetRepository.create({
+            text: updateTweetDto.text,
+            tags: [],
+            images: [],
+            mentions: []
+        });
+
+        if (files) {
+            tweet.images = await this.FileService.addImagesToTweet(files);
+        }
+
+        if (updateTweetDto.tags.length !== 0 && updateTweetDto.tags[0] !== '') {
+            await this.createTags(newTweet, updateTweetDto.tags);
+        }
+
+        if (updateTweetDto.mentions && updateTweetDto.mentions.length !== 0 && updateTweetDto.mentions[0] !== '') {
+            await this.createMentions(newTweet, updateTweetDto.mentions, userId, tweet.mentions);
+            await this.deleteMentions(newTweet.mentions, tweet.mentions)
+        }
+
+        await this.TweetRepository.save({...tweet, ...newTweet});
+        const { tweets, password, ...rest } = user;
+        return { user: rest, tweet: newTweet };
+    }
+    
+    
+     async getAllComments(tweetId: number) {
+        const tweet = await this.TweetRepository.findOne({
+            where: { id: tweetId },
+        });
+
+        if (!tweet) {
+            throw new BadRequestException({ message: 'Cannot find post ' });
+        }
+
+        const postsTable: {
+            user: User;
+            tweet: any;
+        }[] = [];
+
+        const allComments = await this.TweetRepository.find({
+            where: { mainTweet: tweet },
+            relations: ['user'],
+        });
+
+        allComments.forEach(comment => {
+            const { user, ...rest } = comment;
+            postsTable.push({ user, tweet: rest });
+        });
+        return postsTable;
+    }
 
     async createComment(
         tweetId: number,
@@ -93,7 +170,6 @@ export class TweetsService {
         });
 
         const newTweet = this.TweetRepository.create({
-            gif: createTweetDto.gif,
             text: createTweetDto.text,
             user,
             tags: [],
@@ -106,7 +182,7 @@ export class TweetsService {
             newTweet.images = await this.FileService.addImagesToTweet(files);
         }
 
-        if (createTweetDto.tags.length !== 0 && createTweetDto.tags[0] !== '') {
+        if (createTweetDto.tags && createTweetDto.tags.length !== 0 && createTweetDto.tags[0] !== '') {
             await this.createTags(newTweet, createTweetDto.tags);
         }
 
@@ -116,9 +192,9 @@ export class TweetsService {
     }
 
 
-   async deleteComment(postId: number, postToDeleteId: number) {
+   async deleteComment(tweetId: number, tweetToDeleteId: number) {
         const tweet = await this.TweetRepository.findOne({
-            where: { id: postId },
+            where: { id: tweetId },
         });
 
         if (!tweet) {
@@ -126,7 +202,7 @@ export class TweetsService {
         }
 
         const tweetToDelete = await this.TweetRepository.findOne({
-            id: postToDeleteId,
+            id: tweetToDeleteId,
             mainTweet: tweet,
         });
 
@@ -137,7 +213,7 @@ export class TweetsService {
         }
 
         return await this.TweetRepository.remove(tweetToDelete);
-    }
+   }
 
     private async createTags(newTweet: Tweet, tags: string[]) {
         await Promise.all(
@@ -160,47 +236,49 @@ export class TweetsService {
         );
     }
 
+    private async createMentions(newTweet: Tweet, mentions: string[], userId: number, oldMentions?: any) {
+        await Promise.all(
+            mentions.map(async username => {
+                const user = await this.UserRepository.findOne({username})
+               
+                
+                if (!user) {
+                    throw new BadRequestException({
+                        message: 'Username does not exists',
+                    });
+                }
+
+                 if (user.id === userId) {
+                    throw new BadRequestException({
+                        message: 'Cannot mention yourself',
+                    });
+                 }
+                
+                const mentionedUser = Array.isArray(oldMentions) ? oldMentions.find((mention) => mention.username === username) : false
+                
+                if (mentionedUser) {
+                    newTweet.mentions.push(mentionedUser)
+                } else {
+                    const newMention = this.MentionRepository.create({
+                    username,
+                    email: user.email
+                    });
+
+                    await this.MentionRepository.save(newMention)
+
+                    newTweet.mentions.push(newMention);
+                }
+            }),
+        );
+    }
+
+    private async deleteMentions(newMentions, oldMentions) {
+        const mentionsToDelete = oldMentions.filter(oldMention => !newMentions.some(newMention=> oldMention.username === newMention.username))
+        await Promise.all(
+            mentionsToDelete.map(async mention => {
+                await this.MentionRepository.remove(mention);
+            })
+        )
+    }
+
 }
-
-
-// {
-//     "user": {
-//         "id": 2,
-//         "fullName": "Maxim",
-//         "username": "browlStars12",
-//         "email": "max-dev-work123@mal.ru",
-//         "password": "$2b$12$Z8CvNzCUa/w2RJyL98S3W.oO967Hx9StBGyk1fhj7x3k/cKzfLHnK",
-//         "createdAt": "2021-08-30T08:19:57.411Z",
-//         "updatedAt": "2021-08-30T08:19:57.411Z",
-//         "avatar": null
-//     },
-//     "tweet": {
-//         "text": "this is my first tweet",
-//         "user": {
-//             "id": 2,
-//             "fullName": "Maxim",
-//             "username": "browlStars12",
-//             "email": "max-dev-work123@mal.ru",
-//             "password": "$2b$12$Z8CvNzCUa/w2RJyL98S3W.oO967Hx9StBGyk1fhj7x3k/cKzfLHnK",
-//             "createdAt": "2021-08-30T08:19:57.411Z",
-//             "updatedAt": "2021-08-30T08:19:57.411Z",
-//             "avatar": null
-//         },
-//         "images": [],
-//         "tags": [
-//             {
-//                 "text": "killallmen",
-//                 "id": 1
-//             },
-//             {
-//                 "text": "pony",
-//                 "id": 2
-//             }
-//         ],
-//         "comments": [],
-//         "gif": null,
-//         "id": 1,
-//         "createdAt": "2021-08-30T08:22:04.331Z",
-//         "updatedAt": "2021-08-30T08:22:04.331Z"
-//     }
-// }

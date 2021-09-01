@@ -20,7 +20,6 @@ export class Tag extends BaseEntity {
       () => Tweet,
       tweet => tweet.tags,
    )
-      
     @JoinTable()
     tweets?: Tweet[];
 }
