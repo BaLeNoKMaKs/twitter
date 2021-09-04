@@ -14,7 +14,8 @@ export class Mention {
     
     @ManyToOne(
     () => Tweet,
-    tweet => tweet.mentions,
+        tweet => tweet.mentions,
+    {onDelete: "CASCADE"}
     )
     tweet: Tweet;
 

@@ -6,7 +6,7 @@ import { Entity, ManyToOne } from 'typeorm';
 export class TweetImage extends AbstractImageEntity {
     @ManyToOne(
         () => Tweet,
-        tweet => tweet.images,
+        tweet => tweet.images, {onDelete: "CASCADE"}
     )
     tweet: Tweet;
 }

@@ -1,6 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
+import { FileService } from 'src/file/file.service';
 import { UserRepository } from "../users/users.repository";
 import { SignInDto } from './dto/signIn.dto';
 import { SignUpDto } from './dto/signUp.dto';
@@ -13,11 +14,17 @@ export class AuthService {
         @InjectRepository(UserRepository)
         readonly userRepository: UserRepository,
         readonly jwtService: JwtService,
+        private readonly FileService: FileService
     ) {}
 
-  signUp(signUpDto: SignUpDto): Promise<void> {
-         return this.userRepository.signUp(signUpDto);
-  }
+    async signUp(signUpDto: SignUpDto, file?: any): Promise<void> {
+         const newUser = { ...signUpDto, avatar: null }
+    
+        if (file) {
+            newUser.avatar = await this.FileService.addAvatar(file);
+        }
+         return this.userRepository.signUp(newUser);
+      }
    
       async signIn(signInDto: SignInDto): Promise<{ accessToken: string }> {
         const email = await this.userRepository.validateUserPassword(signInDto);

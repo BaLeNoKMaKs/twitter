@@ -7,9 +7,10 @@ import { User } from '../entities/user.entity';
 
 @EntityRepository(User)
 export class UserRepository extends Repository<User> {
-   async signUp(signUpDto: SignUpDto): Promise<void> {
-       const hashPassword = await this.hashPassword(signUpDto.password);
-       const user = this.create({...signUpDto, password: hashPassword});
+    async signUp(signUpDto: SignUpDto): Promise<void> {
+        const hashPassword = await this.hashPassword(signUpDto.password);
+        
+        const user = this.create({...signUpDto, password: hashPassword});
        
       try {
           await this.save(user);

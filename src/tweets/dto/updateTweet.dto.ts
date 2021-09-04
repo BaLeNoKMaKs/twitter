@@ -1,5 +1,6 @@
 export class UpdateTweetDto {
-    text: string;
+   text: string;
    tags?: string[];
-   mentions?: string[]
+    mentions?: string[];
+    deleteImages?: boolean
 }

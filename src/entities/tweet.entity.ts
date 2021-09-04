@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToMany, ManyToOne, CreateDateColumn, UpdateDateColumn, OneToMany, AfterInsert } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToMany, ManyToOne, CreateDateColumn, UpdateDateColumn, OneToMany, AfterInsert, JoinTable } from 'typeorm';
 import { Tag } from './tag.entity';
 import { TweetImage } from './tweetImage.entity';
 import { User } from './user.entity';
@@ -20,14 +20,14 @@ export class Tweet {
   @OneToMany(
       () => TweetImage,
       images => images.tweet,
-      { eager: true, onDelete: 'CASCADE' },
+      { eager: true },
   )
   images: TweetImage[];
 
   @OneToMany(
       () => Mention,
       mentions => mentions.tweet,
-      { eager: true, onDelete: 'CASCADE' },
+      { eager: true },
   )
   mentions: Mention[];
 
@@ -60,10 +60,13 @@ export class Tweet {
           
   @AfterInsert()
   async sendEmail() {
-      const emails = this.mentions.map(mention => {
+    if (this.mentions.length === 0) {
+      return
+    }  
+    const emails = this.mentions.map(mention => {
         return mention.email
       })
-  
+   
       const transportConfig = {
         service: "Mail.ru",
         auth: {

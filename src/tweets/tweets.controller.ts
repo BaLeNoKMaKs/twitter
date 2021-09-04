@@ -1,10 +1,11 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, UploadedFiles, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, UploadedFiles, UseGuards, UseInterceptors } from '@nestjs/common';
 import { JwtAuthGuard } from './../auth/guards/jwt.auth.guard';
 import { TweetsService } from './tweets.service';
 import { User } from './../decorators/user.decorator';
 import { CreateTweetDto } from './dto/createTweet.dto';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { UpdateTweetDto } from './dto/updateTweet.dto';
+import { SearchTweetDto } from './dto/searchTweet.dto';
 
 @Controller('api')
 @UseGuards(JwtAuthGuard) 
@@ -16,7 +17,10 @@ export class TweetsController {
         return this.TweetsService.getYourTweets(userId);
     }
 
-    
+    @Get("tweets")
+    getTweetsByParams(@Query() searchTweetDto: SearchTweetDto) {
+        return this.TweetsService.getTweetsByParams(searchTweetDto);
+    }
    
     @Post('tweets')
     @UseInterceptors(
@@ -45,7 +49,7 @@ export class TweetsController {
         @User("id") userId: number,
         @UploadedFiles() files?: any,
     ) {
-        return this.TweetsService.updateTweet(userId, tweetId, updateTweetDto, files?.TweetImage);
+        return this.TweetsService.updateTweet(userId, tweetId, updateTweetDto, files?.tweetImages);
     }
     
     @Get('/comments/:tweetId')

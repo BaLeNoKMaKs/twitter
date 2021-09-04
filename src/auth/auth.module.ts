@@ -6,7 +6,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { UserRepository } from '../users/users.repository';
-import { JwtAuthGuard } from './guards/jwt.auth.guard';
+import { FileModule } from 'src/file/file.module';
 
 @Module({
   imports: [  
@@ -17,7 +17,8 @@ import { JwtAuthGuard } from './guards/jwt.auth.guard';
       expiresIn: "1h",
     },
   }),
-    TypeOrmModule.forFeature([UserRepository])
+    TypeOrmModule.forFeature([UserRepository]),
+    FileModule
   ],
   
   controllers: [AuthController],

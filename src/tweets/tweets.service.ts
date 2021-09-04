@@ -2,7 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Tag } from '../entities/tag.entity';
 import { Tweet } from '../entities/tweet.entity';
-import { Repository } from 'typeorm';
+import { Like, Repository, Not, IsNull, In   } from 'typeorm';
 import { CreateTweetDto } from './dto/createTweet.dto';
 import { UserRepository } from '../users/users.repository';
 import { FileService } from '../file/file.service';
@@ -11,6 +11,7 @@ import * as multer from 'multer';
 import { User } from 'src/entities/user.entity';
 import { UpdateTweetDto } from './dto/updateTweet.dto';
 import { Mention } from './../entities/mention.entity';
+import { SearchTweetDto } from './dto/searchTweet.dto';
 
 
 @Injectable()
@@ -19,7 +20,7 @@ export class TweetsService {
    constructor(
       @InjectRepository(Tag) private readonly TagRepository: Repository<Tag>,
       @InjectRepository(UserRepository) private readonly UserRepository: UserRepository,
-       @InjectRepository(Tweet) private readonly TweetRepository: Repository<Tweet>,
+      @InjectRepository(Tweet) private readonly TweetRepository: Repository<Tweet>,
       @InjectRepository(Mention) private readonly MentionRepository: Repository<Mention>,
       private readonly FileService: FileService
    ) { }
@@ -31,6 +32,62 @@ export class TweetsService {
 
         return userTweets;
    }
+
+    async getTweetsByParams(searchTweetDto: SearchTweetDto) {
+        console.log(searchTweetDto)
+        console.log(!searchTweetDto.tags)
+        const allTweets = await this.TweetRepository.find({
+            where: {
+                text: Like(`%${searchTweetDto.text ? searchTweetDto.text : ""}%`),
+                mainTweet: !searchTweetDto.comments ? IsNull() : Not(IsNull()),
+                // tags: {
+                //     text: Like("%tag%")
+                // }
+            },
+            relations: ['user', "tags"],
+        });
+
+        // const a = await this.TweetRepository
+        //     .createQueryBuilder('tweet')
+        //     .where("tweet.text = Like(%:text%)", "c").getMany()
+        // console.log(a)
+
+        // if (searchTweetDto.tags.length > 0) {
+        //     const tags = await this.TagRepository.find({
+        //     where: {
+        //         text: In(searchTweetDto.tags)
+        //     }
+        //     })
+
+        //     const tagsArr = tags.map((tag) => tag.text)
+        //     console.log(tagsArr)
+        //     console.log(allTweets.filter((tweet) => {
+        //         tweet.tags.forEach((tag) => {
+        //             if (tagsArr.includes(tag.text))
+        //                 return true
+        //         })
+        //         return false
+        //     }))    
+        // }
+        
+
+        // if (searchTweetDto.tags)
+        // console.log(allTweets.filter(tweet => {
+        //     searchTweetDto.tags.includes(tweet.tags.text)
+        // }))
+        
+        const response: {
+            user: User;
+            tweet: any;
+        }[] = [];
+
+        allTweets.forEach(tweet => {
+            const { user, ...rest } = tweet;
+            response.push({ user, tweet: rest });
+        });
+
+        return response;
+    }
    
    async createTweet(
       userId: number,
@@ -42,8 +99,9 @@ export class TweetsService {
       if (!user) {
             throw new BadRequestException({ message: 'Cannot identify user' });
       }
+     
         const newTweet = this.TweetRepository.create({
-            text: createTweetDto.text,
+            text: createTweetDto.text || "",
             user,
             tags: [],
             comments: [],
@@ -51,6 +109,7 @@ export class TweetsService {
             mentions: []
         });
 
+       
         if (files) {
             newTweet.images = await this.FileService.addImagesToTweet(files);
         }
@@ -91,7 +150,7 @@ export class TweetsService {
         }
         
         const tweet = await this.TweetRepository.findOne({
-           where: { id: tweetId },
+            where: { id: tweetId },
         });
         
         if (!tweet && tweet.user.id !== user.id) {
@@ -103,22 +162,34 @@ export class TweetsService {
             tags: [],
             images: [],
             mentions: []
-        });
-
+        })
+        
         if (files) {
-            tweet.images = await this.FileService.addImagesToTweet(files);
+            newTweet.images = await this.FileService.addImagesToTweet(files);
+        } else if (!updateTweetDto.deleteImages) {
+            newTweet.images = tweet.images
+        }
+        
+        if (files || updateTweetDto.deleteImages) {
+            await this.FileService.deleteTweetImages(tweet.images)
         }
 
-        if (updateTweetDto.tags.length !== 0 && updateTweetDto.tags[0] !== '') {
+        if (updateTweetDto.tags && updateTweetDto.tags.length !== 0 && updateTweetDto.tags[0] !== '') {
             await this.createTags(newTweet, updateTweetDto.tags);
+        } else {
+            newTweet.tags = tweet.tags
         }
-
+        
         if (updateTweetDto.mentions && updateTweetDto.mentions.length !== 0 && updateTweetDto.mentions[0] !== '') {
             await this.createMentions(newTweet, updateTweetDto.mentions, userId, tweet.mentions);
             await this.deleteMentions(newTweet.mentions, tweet.mentions)
+        } else {
+            newTweet.mentions = tweet.mentions;
         }
 
         await this.TweetRepository.save({...tweet, ...newTweet});
+        
+
         const { tweets, password, ...rest } = user;
         return { user: rest, tweet: newTweet };
     }
@@ -175,6 +246,7 @@ export class TweetsService {
             tags: [],
             comments: [],
             images: [],
+            mentions: [],
             mainTweet: parentTweet,
         });
 
@@ -184,6 +256,10 @@ export class TweetsService {
 
         if (createTweetDto.tags && createTweetDto.tags.length !== 0 && createTweetDto.tags[0] !== '') {
             await this.createTags(newTweet, createTweetDto.tags);
+        }
+
+        if (createTweetDto.mentions && createTweetDto.mentions.length !== 0 && createTweetDto.mentions[0] !== '') {
+            await this.createMentions(newTweet, createTweetDto.mentions, userId);
         }
 
         await this.TweetRepository.save(newTweet);
