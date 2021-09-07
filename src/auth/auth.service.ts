@@ -5,7 +5,11 @@ import { FileService } from 'src/file/file.service';
 import { UserRepository } from "../users/users.repository";
 import { SignInDto } from './dto/signIn.dto';
 import { SignUpDto } from './dto/signUp.dto';
-import { JwtPayload } from './interfaces/jwt.payload.interface';
+import { JwtPayload } from './interfaces/jwtPayload.interface';
+import { InvalidCredentialsException } from './../shared/exceptions/invalidCredentials.exception';
+import { multer } from 'multer';
+import { AuthResponse } from './interfaces/authResponse.interface';
+import { UserExistsException } from './../shared/exceptions/userExists.exception';
 
 @Injectable()
 export class AuthService {
@@ -17,30 +21,37 @@ export class AuthService {
         private readonly FileService: FileService
     ) {}
 
-    async signUp(signUpDto: SignUpDto, file?: any): Promise<void> {
-         const newUser = { ...signUpDto, avatar: null }
-    
-        if (file) {
-            newUser.avatar = await this.FileService.addAvatar(file);
-        }
-         return this.userRepository.signUp(newUser);
+    async signUp(signUpDto: SignUpDto, file?: multer.File): Promise<void> {
+      const user = await this.userRepository.findOne({where: [{username: signUpDto.username}, {email: signUpDto.email}]})   
+     
+      if (user) {
+         throw new UserExistsException();
+      }
+
+      const newUser = { ...signUpDto, avatar: null }
+          
+          if (file) {
+              newUser.avatar = await this.FileService.addAvatar(file);
+          }
+      
+          await this.userRepository.signUp(newUser);
       }
    
-      async signIn(signInDto: SignInDto): Promise<{ accessToken: string }> {
+      async signIn(signInDto: SignInDto): Promise<AuthResponse> {
         const email = await this.userRepository.validateUserPassword(signInDto);
+      
         if (!email) {
-            throw new UnauthorizedException('Invalid credentials');
+            throw new InvalidCredentialsException();
         }
-         const payload: JwtPayload = { email };
+        
+        const payload: JwtPayload = { email };
          
-         const accessToken = await this.generateJwt(payload);
+        const accessToken = await this.generateJwt(payload);
          
-        console.log(`Generated JWT Token with payload ${JSON.stringify(payload)}`);
         return  { accessToken };
       }
    
-   
-      private generateJwt(payload: JwtPayload) {
+      private generateJwt(payload: JwtPayload): Promise<string> {
          return this.jwtService.signAsync(payload);
       }
 }

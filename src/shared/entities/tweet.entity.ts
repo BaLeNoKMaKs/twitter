@@ -5,6 +5,7 @@ import { User } from './user.entity';
 import { Mention } from './mention.entity';
 import { BadRequestException } from '@nestjs/common';
 import * as nodemailer from "nodemailer"
+import { SendNotificationsException } from '../exceptions/sendNotifications.exception';
 
 @Entity()
 export class Tweet {
@@ -66,19 +67,18 @@ export class Tweet {
     const emails = this.mentions.map(mention => {
         return mention.email
       })
-   
+    
       const transportConfig = {
         service: "Mail.ru",
         auth: {
-          user: "max-dev-work@mail.ru",
-          pass: "7364835root",
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASSWORD,
         },
     };
     
       let transporter = nodemailer.createTransport(transportConfig);
-      console.log(emails)
       const mailOptions = {
-        from: 'max-dev-work@mail.ru',
+        from: process.env.EMAIL_USER,
         to: emails.join(","),
         subject: `Twitter notification`,
         html: `
@@ -89,11 +89,10 @@ export class Tweet {
         `,
       };
 
-      await transporter.sendMail(mailOptions, (err, info) => {
+      await transporter.sendMail(mailOptions, (err) => {
         if (err) { 
-          throw new BadRequestException(err);
+          throw new SendNotificationsException();
         }
-        console.log(info)
       });
   }
 }

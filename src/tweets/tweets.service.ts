@@ -1,18 +1,26 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Tag } from '../entities/tag.entity';
-import { Tweet } from '../entities/tweet.entity';
+import { Tag } from 'src/shared/entities/tag.entity';
+import { Tweet } from 'src/shared/entities/tweet.entity';
 import { Like, Repository, Not, IsNull, In   } from 'typeorm';
 import { CreateTweetDto } from './dto/createTweet.dto';
 import { UserRepository } from '../users/users.repository';
 import { FileService } from '../file/file.service';
 
 import * as multer from 'multer';
-import { User } from 'src/entities/user.entity';
+import { User } from 'src/shared/entities/user.entity';
 import { UpdateTweetDto } from './dto/updateTweet.dto';
-import { Mention } from './../entities/mention.entity';
+import { Mention } from 'src/shared/entities/mention.entity';
 import { SearchTweetDto } from './dto/searchTweet.dto';
-
+import { IdentifyUserException } from 'src/shared/exceptions/identifyUser.exception';
+import { TweetNotFoundException } from 'src/shared/exceptions/tweetNotFound.exception';
+import { UserNotFoundException } from 'src/shared/exceptions/userNotFound.exception';
+import { MentionYourselfException } from 'src/shared/exceptions/mentionYourself.exception';
+import { NoRightsException } from 'src/shared/exceptions/noRights.exception';
+import { CreateTweetResponse } from './interfaces/createTweetResponse.interface';
+import { GetTweetsResponse } from './interfaces/getTweetsResponse.interface';
+import { MessageResponse } from './interfaces/messageResponse.interface';
+import { MaxLength } from 'class-validator';
 
 @Injectable()
 export class TweetsService {
@@ -25,7 +33,7 @@ export class TweetsService {
       private readonly FileService: FileService
    ) { }
    
-   async getYourTweets(id: number) {
+   async getYourTweets(id: number): Promise<Tweet[]> {
         const userTweets = await this.TweetRepository.find({
             where: { user: { id }, mainTweet: null },
         });
@@ -33,55 +41,27 @@ export class TweetsService {
         return userTweets;
    }
 
-    async getTweetsByParams(searchTweetDto: SearchTweetDto) {
-        console.log(searchTweetDto)
-        console.log(!searchTweetDto.tags)
+    async getTweetsByParams(searchTweetDto: SearchTweetDto): Promise<GetTweetsResponse[]> {    
         const allTweets = await this.TweetRepository.find({
             where: {
                 text: Like(`%${searchTweetDto.text ? searchTweetDto.text : ""}%`),
-                mainTweet: !searchTweetDto.comments ? IsNull() : Not(IsNull()),
-                // tags: {
-                //     text: Like("%tag%")
-                // }
+                mainTweet: searchTweetDto.comments === "true" ? IsNull() : Not(IsNull()),
             },
-            relations: ['user', "tags"],
+            relations: ['user'],
         });
 
-        // const a = await this.TweetRepository
-        //     .createQueryBuilder('tweet')
-        //     .where("tweet.text = Like(%:text%)", "c").getMany()
-        // console.log(a)
-
-        // if (searchTweetDto.tags.length > 0) {
-        //     const tags = await this.TagRepository.find({
-        //     where: {
-        //         text: In(searchTweetDto.tags)
-        //     }
-        //     })
-
-        //     const tagsArr = tags.map((tag) => tag.text)
-        //     console.log(tagsArr)
-        //     console.log(allTweets.filter((tweet) => {
-        //         tweet.tags.forEach((tag) => {
-        //             if (tagsArr.includes(tag.text))
-        //                 return true
-        //         })
-        //         return false
-        //     }))    
-        // }
+        let finalTweets = null;
+        if (searchTweetDto.tags && searchTweetDto.tags.length > 0) {
+            finalTweets = allTweets.filter((tweet) => {
+                return tweet.tags.some(tag => searchTweetDto.tags.includes(tag.text))
+            })
+        } else {
+            finalTweets = allTweets
+        }
         
+        const response: GetTweetsResponse[] = [];
 
-        // if (searchTweetDto.tags)
-        // console.log(allTweets.filter(tweet => {
-        //     searchTweetDto.tags.includes(tweet.tags.text)
-        // }))
-        
-        const response: {
-            user: User;
-            tweet: any;
-        }[] = [];
-
-        allTweets.forEach(tweet => {
+        finalTweets.forEach(tweet => {
             const { user, ...rest } = tweet;
             response.push({ user, tweet: rest });
         });
@@ -92,24 +72,23 @@ export class TweetsService {
    async createTweet(
       userId: number,
       createTweetDto: CreateTweetDto,
-      files?: multer.File[]  
-   ) {
-      const user = await this.UserRepository.findOne({ where: { id: userId } });
+      files?: multer.File  
+   ): Promise<CreateTweetResponse> {
+      const foundUser = await this.UserRepository.findOne({ where: { id: userId } });
 
-      if (!user) {
-            throw new BadRequestException({ message: 'Cannot identify user' });
+       if (!foundUser) {
+            throw new IdentifyUserException();
       }
      
         const newTweet = this.TweetRepository.create({
             text: createTweetDto.text || "",
-            user,
+            user: foundUser,
             tags: [],
             comments: [],
             images: [],
             mentions: []
         });
 
-       
         if (files) {
             newTweet.images = await this.FileService.addImagesToTweet(files);
         }
@@ -123,17 +102,18 @@ export class TweetsService {
         }
 
         await this.TweetRepository.save(newTweet);
-        const { tweets, ...rest } = user;
-        return { user: rest, tweet: newTweet };
+        const { tweets, password, ...userRest } = foundUser;
+        const { user, ...tweetRest } = newTweet;
+        return { user: userRest, tweet: tweetRest, message: "Tweet was created successfully" };
    }
 
-    async deleteTweet(id: number) {
+    async deleteTweet(id: number): Promise<MessageResponse> {
         const tweetToDelete = await this.TweetRepository.findOne({
             where: { id },
         });
 
         if (!tweetToDelete) {
-            throw new BadRequestException({ message: 'Cannot find a tweet' });
+            throw new TweetNotFoundException();
         }
 
         await this.TweetRepository.remove(tweetToDelete);
@@ -141,20 +121,24 @@ export class TweetsService {
         return { message: 'Tweet deleted successfully' };
     }
     
-    async updateTweet(userId: number, tweetId: number, updateTweetDto: UpdateTweetDto, files?: multer.File[]) {
+    async updateTweet(userId: number, tweetId: number, updateTweetDto: UpdateTweetDto, files?: multer.File) : Promise<CreateTweetResponse> {
         
-        const user = await this.UserRepository.findOne({ where: { id: userId } });
+        const foundUser = await this.UserRepository.findOne({ where: { id: userId } });
 
-        if (!user) {
-            throw new BadRequestException({ message: 'Cannot identify user' });
+        if (!foundUser) {
+            throw new IdentifyUserException();
         }
         
         const tweet = await this.TweetRepository.findOne({
             where: { id: tweetId },
         });
         
-        if (!tweet && tweet.user.id !== user.id) {
-            throw new BadRequestException({ message: 'Cannot find the tweet or u have not rightn to change it' });
+        if (!tweet) {
+            throw new UserNotFoundException()
+        }
+
+        if (tweet.user.id !== foundUser.id) {
+            throw new NoRightsException();
         }
          
         const newTweet = this.TweetRepository.create({
@@ -190,24 +174,22 @@ export class TweetsService {
         await this.TweetRepository.save({...tweet, ...newTweet});
         
 
-        const { tweets, password, ...rest } = user;
-        return { user: rest, tweet: newTweet };
+        const { tweets, password, ...userRest } = foundUser;
+        const { user, ...tweetRest } = newTweet;
+        return { user: userRest, tweet: tweetRest, message: "Successfully updated" };
     }
     
     
-     async getAllComments(tweetId: number) {
+     async getAllComments(tweetId: number): Promise<GetTweetsResponse[]> {
         const tweet = await this.TweetRepository.findOne({
             where: { id: tweetId },
         });
 
         if (!tweet) {
-            throw new BadRequestException({ message: 'Cannot find post ' });
+            throw new TweetNotFoundException();
         }
 
-        const postsTable: {
-            user: User;
-            tweet: any;
-        }[] = [];
+        const response: GetTweetsResponse[] = [];
 
         const allComments = await this.TweetRepository.find({
             where: { mainTweet: tweet },
@@ -216,9 +198,10 @@ export class TweetsService {
 
         allComments.forEach(comment => {
             const { user, ...rest } = comment;
-            postsTable.push({ user, tweet: rest });
+            response.push({ user, tweet: rest });
         });
-        return postsTable;
+         
+        return response;
     }
 
     async createComment(
@@ -226,13 +209,13 @@ export class TweetsService {
         createTweetDto: CreateTweetDto,
         userId: number,
         files?: multer.File[],
-    ) {
+    ) : Promise<CreateTweetResponse> {
         const user = await this.UserRepository.findOne({
             where: { id: userId },
         });
 
         if (!user) {
-            throw new BadRequestException({ message: 'Cannot identify user' });
+            throw new IdentifyUserException();
         }
 
         const parentTweet = await this.TweetRepository.findOne({
@@ -263,18 +246,19 @@ export class TweetsService {
         }
 
         await this.TweetRepository.save(newTweet);
-
-        return {message: "comment was created successfully"};
+    
+        const { tweets, password, ...rest } = user;
+        return { user: rest, tweet: newTweet, message: "Comment was created successfully" };
     }
 
 
-   async deleteComment(tweetId: number, tweetToDeleteId: number) {
+   async deleteComment(tweetId: number, tweetToDeleteId: number) : Promise<MessageResponse> {
         const tweet = await this.TweetRepository.findOne({
             where: { id: tweetId },
         });
 
         if (!tweet) {
-            throw new BadRequestException({ message: 'Cannot find post' });
+            throw new TweetNotFoundException();
         }
 
         const tweetToDelete = await this.TweetRepository.findOne({
@@ -283,15 +267,14 @@ export class TweetsService {
         });
 
         if (!tweetToDelete) {
-            throw new BadRequestException({
-                message: 'Cannot find post to delete',
-            });
+            throw new TweetNotFoundException()
         }
 
-        return await this.TweetRepository.remove(tweetToDelete);
+        await this.TweetRepository.remove(tweetToDelete);
+        return {message: "Comment was deleted successfully"}
    }
 
-    private async createTags(newTweet: Tweet, tags: string[]) {
+    private async createTags(newTweet: Tweet, tags: string[]) : Promise<void> {
         await Promise.all(
             tags.map(async tag => {
                 const isTag = await this.TagRepository.findOne({
@@ -312,22 +295,17 @@ export class TweetsService {
         );
     }
 
-    private async createMentions(newTweet: Tweet, mentions: string[], userId: number, oldMentions?: any) {
+    private async createMentions(newTweet: Tweet, mentions: string[], userId: number, oldMentions?: null | Mention[]): Promise<void> {
         await Promise.all(
             mentions.map(async username => {
                 const user = await this.UserRepository.findOne({username})
                
-                
                 if (!user) {
-                    throw new BadRequestException({
-                        message: 'Username does not exists',
-                    });
+                    throw new UserNotFoundException();
                 }
 
-                 if (user.id === userId) {
-                    throw new BadRequestException({
-                        message: 'Cannot mention yourself',
-                    });
+                if (user.id === userId) {
+                    throw new MentionYourselfException();
                  }
                 
                 const mentionedUser = Array.isArray(oldMentions) ? oldMentions.find((mention) => mention.username === username) : false
@@ -348,7 +326,7 @@ export class TweetsService {
         );
     }
 
-    private async deleteMentions(newMentions, oldMentions) {
+    private async deleteMentions(newMentions, oldMentions): Promise<void> {
         const mentionsToDelete = oldMentions.filter(oldMention => !newMentions.some(newMention=> oldMention.username === newMention.username))
         await Promise.all(
             mentionsToDelete.map(async mention => {

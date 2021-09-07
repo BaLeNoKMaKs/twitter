@@ -4,9 +4,9 @@ export const FileProvider = {
   provide: "Cloudinary",
   useFactory: (): any => {
     return v2.config({
-   cloud_name: 'maxdevtwitter', 
-  api_key: '912822669229832', 
-  api_secret: 'isombGs_wFKbLKUMq5FWFB0o6Z4'  
+      cloud_name: process.env.CLOUDINARY_NAME, 
+      api_key: process.env.CLOUDINARY_API_KEY, 
+      api_secret: process.env.CLOUDINARY_API_SECRET  
     });
   },
 };

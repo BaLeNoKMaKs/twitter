@@ -3,8 +3,8 @@ import { Controller, Post, Body, Get, UseGuards, Req, UseInterceptors, UploadedF
 import { AuthService } from './auth.service';
 import { SignInDto } from './dto/signIn.dto';
 import { SignUpDto } from './dto/signUp.dto';
-import { JwtAuthGuard } from './guards/jwt.auth.guard';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
+import { AuthResponse } from './interfaces/authResponse.interface';
 
 
 @Controller('api/auth')
@@ -16,26 +16,14 @@ export class AuthController {
         FileFieldsInterceptor([{ name: 'avatar', maxCount: 1 }]),
     )
     @Post('signup') 
-    async signUp(@Body() signUpDto: SignUpDto, @UploadedFiles() files?: any): Promise<{ accessToken: string }> {
+    async signUp(@Body() signUpDto: SignUpDto, @UploadedFiles() files?: any): Promise<AuthResponse> {
         await this.authService.signUp(signUpDto, files?.avatar);
         const {email, password} = signUpDto
         return this.authService.signIn({email, password})
     }
 
     @Post('signin')
-    signIn(@Body() signInDto: SignInDto): Promise<{ accessToken: string }> {
+    signIn(@Body() signInDto: SignInDto): Promise<AuthResponse> {
         return this.authService.signIn(signInDto);
-    }
-
-    @UseGuards(JwtAuthGuard)
-    @Get("protected") 
-    getInfo(@Req() request) {
-        console.log(request.user)
-        return "protected"
-    }
-
-    @Get()
-    getInfo2(@Body() body) {
-        return "not protected"
     }
 }

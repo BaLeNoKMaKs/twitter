@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { Avatar } from './../entities/avatar.entity';
-import { TweetImage } from './../entities/tweetImage.entity';
+import { Avatar } from 'src/shared/entities/avatar.entity';
+import { TweetImage } from 'src/shared/entities/tweetImage.entity';
 import { FileProvider } from './file.provider';
 import { FileService } from './file.service';
 

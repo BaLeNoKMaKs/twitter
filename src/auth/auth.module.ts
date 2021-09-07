@@ -7,18 +7,25 @@ import { PassportModule } from '@nestjs/passport';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { UserRepository } from '../users/users.repository';
 import { FileModule } from 'src/file/file.module';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 
+console.log(process.env, 1000000000000000000000000000)
 @Module({
-  imports: [  
-    PassportModule,
-    JwtModule.register({
-    secret: process.env.JWT_SECRET || "SECRET",
-    signOptions: {
-      expiresIn: "1h",
-    },
-  }),
+  imports: [
+   PassportModule, 
+    JwtModule.registerAsync({
+            imports: [ConfigModule],
+            useFactory: async (configService: ConfigService) => ({
+                secret:  configService.get('SECRET_KEY_JWT'),
+                signOptions: {
+                    expiresIn: configService.get('JWT_EXPIRES_IN'),
+                },
+            }),
+            inject: [ConfigService],
+        }),
     TypeOrmModule.forFeature([UserRepository]),
-    FileModule
+    FileModule,
+    ConfigModule
   ],
   
   controllers: [AuthController],
