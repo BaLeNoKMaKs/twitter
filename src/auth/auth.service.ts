@@ -1,15 +1,16 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FileService } from 'src/file/file.service';
-import { UserRepository } from "../users/users.repository";
+import { FileService } from '../file/file.service';
 import { SignInDto } from './dto/signIn.dto';
 import { SignUpDto } from './dto/signUp.dto';
 import { JwtPayload } from './interfaces/jwtPayload.interface';
-import { InvalidCredentialsException } from './../shared/exceptions/invalidCredentials.exception';
+import { InvalidCredentialsException } from '../shared/exceptions/invalidCredentials.exception';
 import { multer } from 'multer';
 import { AuthResponse } from './interfaces/authResponse.interface';
-import { UserExistsException } from './../shared/exceptions/userExists.exception';
+import { UserExistsException } from '../shared/exceptions/userExists.exception';
+import { UserRepository } from '../users/users.repository';
+
 
 @Injectable()
 export class AuthService {

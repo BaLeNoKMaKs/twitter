@@ -9,7 +9,7 @@ import { TweetsModule } from './tweets/tweets.module';
 import { FileModule } from './file/file.module';
 
 @Module({
-  imports: [TypeOrmModule.forRoot(), ConfigModule.forRoot({isGlobal: true}), AuthModule, UsersModule, TweetsModule, FileModule],
+  imports: [TypeOrmModule.forRoot({keepConnectionAlive: true}), ConfigModule.forRoot({isGlobal: true}), AuthModule, UsersModule, TweetsModule, FileModule],
   controllers: [AppController],
   providers: [AppService],
 })

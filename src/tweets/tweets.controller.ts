@@ -1,13 +1,14 @@
 import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, UploadedFiles, UseGuards, UseInterceptors } from '@nestjs/common';
-import { JwtAuthGuard } from './../auth/guards/jwt.auth.guard';
+import { multer } from 'multer';
+
+import { JwtAuthGuard } from '../auth/guards/jwt.auth.guard';
 import { TweetsService } from './tweets.service';
 import { User } from '../shared/decorators/user.decorator';
 import { CreateTweetDto } from './dto/createTweet.dto';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { UpdateTweetDto } from './dto/updateTweet.dto';
 import { SearchTweetDto } from './dto/searchTweet.dto';
-import { multer } from 'multer';
-import { Tweet } from 'src/shared/entities/tweet.entity';
+import { Tweet } from '../shared/entities/tweet.entity';
 import { GetTweetsResponse } from './interfaces/getTweetsResponse.interface';
 import { CreateTweetResponse } from './interfaces/createTweetResponse.interface';
 import { MessageResponse } from './interfaces/messageResponse.interface';

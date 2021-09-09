@@ -1,5 +1,5 @@
 export class CreateTweetDto {
-    text: string;
+    text?: string;
     tags?: string[];
     mentions?: string[];
 }

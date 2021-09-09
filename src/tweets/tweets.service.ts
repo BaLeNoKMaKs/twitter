@@ -1,26 +1,24 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Tag } from 'src/shared/entities/tag.entity';
-import { Tweet } from 'src/shared/entities/tweet.entity';
-import { Like, Repository, Not, IsNull, In   } from 'typeorm';
+import { Like, Repository, Not, IsNull   } from 'typeorm';
+import * as multer from 'multer';
+
+import { Tag } from '../shared/entities/tag.entity';
+import { Tweet } from '../shared/entities/tweet.entity';
+import { IdentifyUserException } from '../shared/exceptions/identifyUser.exception';
+import { TweetNotFoundException } from '../shared/exceptions/tweetNotFound.exception';
+import { UserNotFoundException } from '../shared/exceptions/userNotFound.exception';
+import { MentionYourselfException } from '../shared/exceptions/mentionYourself.exception';
+import { Mention } from '../shared/entities/mention.entity';
 import { CreateTweetDto } from './dto/createTweet.dto';
 import { UserRepository } from '../users/users.repository';
 import { FileService } from '../file/file.service';
-
-import * as multer from 'multer';
-import { User } from 'src/shared/entities/user.entity';
 import { UpdateTweetDto } from './dto/updateTweet.dto';
-import { Mention } from 'src/shared/entities/mention.entity';
 import { SearchTweetDto } from './dto/searchTweet.dto';
-import { IdentifyUserException } from 'src/shared/exceptions/identifyUser.exception';
-import { TweetNotFoundException } from 'src/shared/exceptions/tweetNotFound.exception';
-import { UserNotFoundException } from 'src/shared/exceptions/userNotFound.exception';
-import { MentionYourselfException } from 'src/shared/exceptions/mentionYourself.exception';
-import { NoRightsException } from 'src/shared/exceptions/noRights.exception';
+import { NoRightsException } from '../shared/exceptions/noRights.exception';
 import { CreateTweetResponse } from './interfaces/createTweetResponse.interface';
 import { GetTweetsResponse } from './interfaces/getTweetsResponse.interface';
 import { MessageResponse } from './interfaces/messageResponse.interface';
-import { MaxLength } from 'class-validator';
 
 @Injectable()
 export class TweetsService {
@@ -31,7 +29,7 @@ export class TweetsService {
       @InjectRepository(Tweet) private readonly TweetRepository: Repository<Tweet>,
       @InjectRepository(Mention) private readonly MentionRepository: Repository<Mention>,
       private readonly FileService: FileService
-   ) { }
+   ) { } 
    
    async getYourTweets(id: number): Promise<Tweet[]> {
         const userTweets = await this.TweetRepository.find({
@@ -45,7 +43,7 @@ export class TweetsService {
         const allTweets = await this.TweetRepository.find({
             where: {
                 text: Like(`%${searchTweetDto.text ? searchTweetDto.text : ""}%`),
-                mainTweet: searchTweetDto.comments === "true" ? IsNull() : Not(IsNull()),
+                mainTweet: searchTweetDto.comments === "true" ? Not(IsNull()) : IsNull(),
             },
             relations: ['user'],
         });
@@ -60,10 +58,11 @@ export class TweetsService {
         }
         
         const response: GetTweetsResponse[] = [];
-
+        
         finalTweets.forEach(tweet => {
-            const { user, ...rest } = tweet;
-            response.push({ user, tweet: rest });
+            const { user, ...tweetRest } = tweet;
+            const { password, ...userRest } = user;
+            response.push({ user: userRest, tweet: tweetRest });
         });
 
         return response;
@@ -75,12 +74,12 @@ export class TweetsService {
       files?: multer.File  
    ): Promise<CreateTweetResponse> {
       const foundUser = await this.UserRepository.findOne({ where: { id: userId } });
-
-       if (!foundUser) {
-            throw new IdentifyUserException();
+      
+      if (!foundUser) {
+        throw new IdentifyUserException();
       }
      
-        const newTweet = this.TweetRepository.create({
+        const newTweet = await this.TweetRepository.create({
             text: createTweetDto.text || "",
             user: foundUser,
             tags: [],
@@ -102,9 +101,9 @@ export class TweetsService {
         }
 
         await this.TweetRepository.save(newTweet);
-        const { tweets, password, ...userRest } = foundUser;
-        const { user, ...tweetRest } = newTweet;
-        return { user: userRest, tweet: tweetRest, message: "Tweet was created successfully" };
+       const { tweets, password, ...userRest } = foundUser;
+       const { user, ...tweetRest } = newTweet;
+       return { user: userRest, tweet: tweetRest, message: "Tweet was created successfully" };
    }
 
     async deleteTweet(id: number): Promise<MessageResponse> {
@@ -141,7 +140,7 @@ export class TweetsService {
             throw new NoRightsException();
         }
          
-        const newTweet = this.TweetRepository.create({
+        const newTweet = await this.TweetRepository.create({
             text: updateTweetDto.text,
             tags: [],
             images: [],
@@ -299,7 +298,6 @@ export class TweetsService {
         await Promise.all(
             mentions.map(async username => {
                 const user = await this.UserRepository.findOne({username})
-               
                 if (!user) {
                     throw new UserNotFoundException();
                 }
@@ -319,7 +317,6 @@ export class TweetsService {
                     });
 
                     await this.MentionRepository.save(newMention)
-
                     newTweet.mentions.push(newMention);
                 }
             }),
